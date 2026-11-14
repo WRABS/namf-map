@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NAMF Markets Map</title>
+  <meta charset="utf-8" />
+  <style>
+    #map { height: 100vh; width: 100%; }
+    .legend { background: white; padding: 10px; margin: 10px; font-family: Arial; font-size: 13px; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+    .legend h4 { margin: 0 0 8px 0; }
+    .legend-item { margin: 4px 0; display: flex; align-items: center; }
+    .legend-color { width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script>
+    // ========== CONFIG ==========
+    const SUPABASE_URL = "https://kwbicujcnhjsclovgwiw.supabase.co";          
+    const SUPABASE_ANON_KEY = "sb_publishable_0jlXm7EyuPKdbcwTI_b0ag_Z72M31J6";                        
+    const GOOGLE_MAPS_API_KEY = "AIzaSyAax14dG0zYxDgYNr1kFoKj4aAN0BaLLj0";           
+
+    // Color mapping
+    const colorMap = {
+      "Permanent": "#006400",           // Dark Green
+      "Pop-up": "#FF8C00",              // Orange
+      "Show & Shine": "#1E90FF",        // Blue
+      "Powwow": "#8A2BE2",              // Purple
+      "Fair": "#DC143C",                // Red
+      "Rodeo": "#DC143C",
+      "Stampede": "#DC143C",
+      "Public Event": "#DC143C",
+      "Food Truck": "#FFD700",          // Yellow
+      "Other": "#808080"                // Gray
+    };
+
+    function getColor(eventType, claimed) {
+      const base = colorMap[eventType] || "#808080";
+      return claimed ? base : base + "80"; // 50% opacity for unclaimed
+    }
+
+    async function initMap() {
+      const map = new google.maps.Map(document.getElementById("map"), {
+        zoom: 4,
+        center: { lat: 45, lng: -100 }, // North America center
+        mapTypeId: "roadmap"
+      });
+
+      // Legend
+      const legend = document.createElement("div");
+      legend.className = "legend";
+      legend.innerHTML = `
+        <h4>Market Type Legend</h4>
+        <div class="legend-item"><span class="legend-color" style="background:#006400"></span> Permanent</div>
+        <div class="legend-item"><span class="legend-color" style="background:#FF8C00"></span> Pop-up / Seasonal</div>
+        <div class="legend-item"><span class="legend-color" style="background:#1E90FF"></span> Show & Shine</div>
+        <div class="legend-item"><span class="legend-color" style="background:#8A2BE2"></span> Powwow</div>
+        <div class="legend-item"><span class="legend-color" style="background:#DC143C"></span> Fairs / Rodeos / Public Events</div>
+        <div class="legend-item"><span class="legend-color" style="background:#FFD700"></span> Food Truck Focused</div>
+        <div class="legend-item"><span class="legend-color" style="background:#808080"></span> Other</div>
+        <div class="legend-item"><span class="legend-color" style="background:#808080; opacity:0.5"></span> Unclaimed (faded)</div>
+      `;
+      map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(legend);
+
+      // Fetch from Supabase
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/markets?select=name,latitude,longitude,event_type,claimed,city,postal_code`, {
+        headers: {
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+        }
+      });
+
+      const markets = await response.json();
+
+      markets.forEach(m => {
+        if (!m.latitude || !m.longitude) return;
+
+        const marker = new google.maps.Marker({
+          position: { lat: parseFloat(m.latitude), lng: parseFloat(m.longitude) },
+          map: map,
+          title: m.name, // native tooltip on hover
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: getColor(m.event_type, m.claimed),
+            fillOpacity: m.claimed ? 0.9 : 0.5,
+            strokeColor: "#ffffff",
+            strokeWeight: 1
+          }
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `
+            <strong>${m.name}</strong><br>
+            Type: ${m.event_type || "N/A"}<br>
+            Status: ${m.claimed ? "Claimed" : "Unclaimed"}<br>
+            ${m.city || ""} ${m.postal_code || ""}
+          `
+        });
+
+        marker.addListener("mouseover", () => infoWindow.open(map, marker));
+        marker.addListener("mouseout", () => infoWindow.close());
+        marker.addListener("click", () => infoWindow.open(map, marker));
+      });
+    }
+  </script>
+
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR-GOOGLE-MAPS-API-KEY&callback=initMap">
+  </script>
+</body>
+</html>
